@@ -1,0 +1,1787 @@
+
+model Task2Utility
+
+/*
+ * 
+5 types of agents 			(TRAITS)
+Rock fan - Dances (generous,acceptdrink,wantstodanceorgotopub,fightwinorloose) -> Pub, Stage - Gunnar
+(Bad guy (startafight,fightwinorloose) -> Pub or stage, Journalist, Thief?) - flip chill guy - Gunnar
+Thief - takes money (goodorbadthief, howoftenIshouldrobpeople, sharemoneywithbadguyornot,getcaught) -> Pub or stage Akhil
+Chill person - gets annoyed (generous, acceptdrink,wantstodanceorgotopub,fightwinorloose) -> Pub or stage - Gunnar
+Journalist - takes photos or ask the agent how are you  -> Stage, pub or Photo area/Police station? - Akhil
+Police - (catch bad guy, catch thief,fightwinorloose) -> goes everywhere - Akhil
+
+2 Places
+Photo area
+PubT
+Stage 
+Police station
+Secret place for thief.
+  
+Attribute:
+
+Drunk
+Happy
+Thief loose money.
+ 
+ */
+
+global {
+	
+	int nbOfParticipants <- 20; //people should be 5
+	int circleDistance <- 8;	
+	int talk_range <- 5; //ask if smaller or equal	
+	int globalDelayTime <- 20; //time before agent starts talking
+	int wantsToDanceLimit<-50;
+	int acceptDrinkLimit<-50;
+	bool tag <- false; 
+	list<Thief> caughtThieves;
+	
+	//int nb_people_infected <- 0 update: (RockFan and ChillGuy) sum (each.happy);
+	//list<int> nb_RockFanHappyList <- [] update: (RockFan) collect (each.happy);
+	//list<int> nb_ChillGuyHappyList <- [] update: (ChillGuy) collect (each.happy);
+	
+	int sumHappy <- 0 update: sum(   (RockFan) collect (each.happy) + (ChillGuy) collect (each.happy)  );
+	int sumDrunk <- 0 update: sum((RockFan) collect (each.drunk) + (ChillGuy) collect (each.drunk));
+	
+	//int casinoRepo <- 0 update: sum((Casino) collect (each.money) + casinoRepo);
+	int financeIn <-0 update: sum((Casino) collect (each.money));
+	int policeRepo <-0 update: sum((PoliceStation) collect (each.money));
+	int ChillGuyWantsToDance <- 0 update: ChillGuy count (each.wantsToDance>wantsToDanceLimit);
+	int ChillGuyNotWantToDance <- 0 update: ChillGuy count (each.wantsToDance<=wantsToDanceLimit);
+	
+	//int foodSum <- 0 update: foodSum + (int)(sum nb_RockFanHappyList);
+	
+	//int nb_RockFanHappySum <- 0 update: nb_RockFanHappySum + (sum nb_RockFanHappyList);
+	//int nb_people_infected <- 0 update: (RockFan and ChillGuy) sum (each.happy);
+	
+	//list<FestivalGuest> inform_done_participant <- [nil,nil,nil,nil,nil];
+	
+	list<list> inform_result_participant <- [[],[],[],[],[],[]];
+	list<int> numOfRefusers <- [0,0,0,0,0];
+	
+	init {		
+		
+		create RockFan number: 5;
+		create ChillGuy number: 5;
+		create Thief number: 5;
+		create Police number: 5;
+		create Journalist number: 5;
+		
+
+		
+		create PhotoArea number: 1
+		{
+		location <- {80,10,0};
+		}
+		
+				
+		create Stage number: 1
+		{
+		location <- {50,50,0};
+		}
+		
+		create Pub number: 1
+		{
+		location <- {50,100,0};
+		}
+		
+		create Casino number: 1
+		{
+		location <- {90,90,0};
+		}
+		
+		create PoliceStation number: 1
+		{
+		location <- {10,10,0};
+		}
+		write 'Please step the simulation to observe the outcome in the console';
+	}
+}
+
+species PhotoArea{
+	
+		aspect base {
+		draw rectangle(10,5) color: #chocolate depth:5;
+	}
+	
+	
+}
+
+species PoliceStation{
+	int money<-rnd(5,100);
+		aspect base {
+		draw rectangle(10,5) color: #blue depth:5;
+	}
+	
+	
+}
+
+species Pub{
+	
+		aspect base {
+		draw rectangle(10,5) color: #green depth:5;
+	}
+	
+	
+}
+
+species Casino{
+	int money <-0;
+		aspect base {
+		draw circle(5) color: #grey depth:5;
+	}
+
+}
+
+
+
+species Stage skills: [fipa] {
+		
+	aspect base {
+		draw rectangle(13,5) color: #darkslategrey ;
+		
+	}
+}
+
+species Thief skills: [fipa,moving] {
+	
+	 
+	bool Thief <-false;
+	bool busy <- false;
+	float currentBestUtility <- 0.0;
+	int participantListIndex;
+	point initPoint <- {(rnd(0,100)),(rnd(0,100)),0};
+	bool rob<-false;	
+	point targetPoint <- nil;
+	list<ChillGuy> ChillGuysNotBusy;
+	list<RockFan> RockFanNotBusy;
+	ChillGuy chill;
+	RockFan rock;
+	bool goton <- false;
+	bool getCaught <- false;
+	int localDelayTime <- 80;
+	bool delayOK<-true;
+    int startDelay;
+    
+    /* Traits */
+    int clutch <- rnd(40,60);
+    int money <- 5;
+    int willSucceedRob <- rnd(0,50);
+    int caughtChance <- rnd(2,4);
+    
+    /* Attributes */
+    int happy <- 0;
+    
+    /* Rules */
+    list<string> answerChillguy1 <- ["That's none of your business","I'm looking for my friend"];
+    
+    list<string> answerRockfan1 <- ["Sorry","Sorry I am lost"];
+
+    list<string> answerThief <- ["Yes thank you my friend I have low on money","No thank you I have enough money"];
+    list<string> askThief1 <- ["Hello, Do you want some money?","Hello thief friend"];
+    
+    
+    
+    
+		
+    reflex beIdle when: empty(ChillGuysNotBusy) and empty(RockFanNotBusy) {
+		do wander;
+	}
+	
+		
+	reflex moveToTarget when: targetPoint != nil{
+		do goto target:targetPoint;
+	}
+	
+		reflex initiateTalkThief when: !empty(Thief at_distance talk_range) and flip(0.01){
+		list ThiefsNotBusy <- Thief at_distance talk_range;
+				
+		if(length(ThiefsNotBusy)>0)
+		{
+			Thief talkTo <- one_of(ThiefsNotBusy);
+			
+			ask talkTo {
+							
+				if(myself.money>5)
+				{
+				write myself.name+" says "+myself.askThief1[0];
+				if(self.money>25)
+				{
+					write self.name+" says "+self.answerThief[0];
+					self.money<-self.money+1;
+					myself.money<-myself.money-1;
+					
+				}
+				else{
+					write self.name+" says "+self.answerThief[1];
+				}
+				}			
+				else{
+				write myself.name+"says"+myself.askThief1[1];
+				}
+										
+				
+			}
+		}
+				
+	} 
+
+	
+	reflex initiateRob when: !rob and self.money <30 and !getCaught {
+	
+	ChillGuysNotBusy <- ChillGuy where (each.talking=true and each.robbed =false);	
+	RockFanNotBusy <- RockFan where (each.talking=true and each.robbed =false);	
+		
+	
+	if(clutch >= 50 and !empty(ChillGuysNotBusy)){	
+	  chill <- one_of(ChillGuysNotBusy);
+	  targetPoint<- any_location_in(chill);
+	  write name+"********************Letmerob!!!*************************";
+	
+	  rob <- true;
+	}
+	else if(clutch < 50 and !empty(RockFanNotBusy)){	
+	rock <-one_of(RockFanNotBusy);
+	targetPoint<- any_location_in(rock);
+	
+	write name+"********************Letmerob!!!*************************";
+	rob <- true;
+	}
+	}
+	
+	
+	reflex Talktopolice when: !empty(cfps){
+		message proposalFromInitiator <- cfps[0];
+		string info <- proposalFromInitiator.contents[0];
+		string info2 <- proposalFromInitiator.contents[1];
+		string info3 <- proposalFromInitiator.contents[2];
+		int catchThiefSuc4 <- proposalFromInitiator.contents[3];
+		
+		write info;
+		if(self.money=5 or catchThiefSuc4<25){
+			write info3;
+			tag <- true;
+		}
+		else if(self.money>5){
+			write info2;
+			getCaught <- true;
+			add self to: caughtThieves;
+			//write caughtThieves;		
+			targetPoint <- any_location_in(one_of(PoliceStation));
+			do start_conversation with: [ to :: list(Journalist), protocol :: 'fipa-contract-net', performative :: 'inform', contents :: [self]];
+			self.money <-0;
+		}
+	}	
+	
+	
+	reflex startRob when:rob and !getCaught{
+	
+	if(!empty(Police at_distance caughtChance)){
+		write name+"******************Ohh shit!! police!!!!!!*********************";
+	  rob <- false;
+	  targetPoint <- nil;
+	  happy<-happy-5;
+	 
+	  
+	  do start_conversation with: [ to :: list(one_of(Police at_distance 4)), protocol :: 'fipa-contract-net', performative :: 'inform', contents :: [self,self.location]];
+	  clutch <- rnd(40,60);
+	}
+	
+	else{
+		willSucceedRob <- rnd(0,50);
+		
+		if(clutch >= 50 and distance_to(self, targetPoint)<1){	
+			ask chill{
+			if(self.money>5 and myself.willSucceedRob>25){
+				write name+"********************NICEE!!!*************************";
+			myself.money <- myself.money+5; 
+			self.money <- self.money-5;
+			write myself.money;
+			myself.rob <- false;
+			myself.happy<-myself.happy+1;
+			self.happy<-self.happy-1;
+			}
+			else{
+				write name+"*************arghhhh!! poor fella!*************";
+				myself.clutch <- rnd(40,60);
+				myself.rob <- false;
+				myself.happy<-myself.happy-1;
+				self.happy<-self.happy+1;
+				
+			}
+			}	
+		}
+		else if(clutch <50 and distance_to(self, targetPoint)<1){
+			willSucceedRob <- rnd(0,50);
+			ask rock {
+			if(self.money>5 and myself.willSucceedRob>25){
+				write "********************NICEE!!!*************************";
+			myself.money <- myself.money+5; 
+			self.money <- self.money-5;
+			write myself.money;
+			myself.rob <- false;
+			myself.happy<-myself.happy+1;
+			self.happy<-self.happy-1;
+			
+			}
+			else{
+				write "*************arghhhh!! poor fella!*********";
+				myself.clutch <- rnd(40,60);
+				myself.rob <- false;
+				myself.happy<-myself.happy-1;
+				self.happy<-self.happy+1;
+				
+			  }
+		   }	
+		}
+	}
+	
+ }
+ 
+ reflex gotoRobbed when:!rob and self.money=30{
+ 	
+ 	 targetPoint<- any_location_in(one_of(Casino));
+ 	 goton <- true;
+ 	 
+ }
+ 
+ reflex saveRobbed when:goton and distance_to(self,targetPoint)<1 {
+ 	
+ 	ask Casino at_distance 1{	
+ 		self.money <- self.money + myself.money;
+ 		myself.money<- 5;		
+ 		myself.goton<- false;
+ 	}
+ 	
+ }
+ 
+	aspect base {
+		draw circle(1) color: #red depth:1;
+	}
+	
+}
+
+
+species Police skills: [fipa,moving] { 
+	
+	bool Police <-true;
+	
+	bool busy <- false;
+	
+	
+	float currentBestUtility <- 0.0;
+	
+	int participantListIndex;
+	
+	point initPoint <- {(rnd(0,100)),(rnd(0,100)),0};
+	
+	
+	point targetPoint <- nil;
+	bool patroling <- false;
+	bool raid <- false;
+	int num <-0;
+	
+	/* Traits */
+	int money <-0;
+	int catchThiefSuccess<-rnd(0,50);
+	int patrol <- rnd(1,100);
+	
+	/* Some rules, more inside functions */
+	list<string> answerChillguy1 <- ["I have catched many thiefs","I have not catched so many"];
+	
+	list<string> answerRockfan1 <- ["Yes I will continue cath them","I am a looser Police. I can't"];
+	
+	//Rules for talking
+	list<string> askChillguy2 <- ["Why are you so quiet?","Good day quiet guy"];
+	
+	list<string> askRockFan2 <- ["Why are you so loud?","You are very loud. Please be quiet."];
+	
+	
+	
+	
+		reflex initiateRockFan when: !empty(RockFan at_distance talk_range) and flip(0.01){
+		list RockFansNotBusy <- RockFan at_distance talk_range;
+				
+		if(length(RockFansNotBusy)>0)
+		{
+			RockFan talkTo <- one_of(RockFansNotBusy);
+			
+			ask talkTo {
+							
+				if(myself.patrol>50)
+				{
+				write myself.name+" says "+myself.askRockFan2[0];
+				if(self.drunk>0)
+				{
+					write self.name+" says "+self.answerPolice2[0];
+					
+				}
+				else{
+					write self.name+" says "+self.answerPolice2[1];
+				}
+				}			
+				else{
+				write myself.name+"says"+myself.askRockFan2[1];
+				}
+										
+				
+			}
+		}
+				
+	} 
+	
+	reflex salute_other_police when: !empty(Police at_distance 1) and num=0 {
+		
+		ask Police at_distance 1{
+			
+			if(self.raid = false and myself.raid = false){
+				write "<<<<<<Good Day Gentlemen!>>>>>>>";
+				num <-1;
+						
+			}
+			if(self.raid = true){
+				write "<<<<<<<You are doing a good job bringing us money>>>>>>>>>";
+				num <-1;
+			}
+			
+		
+		}
+	}
+	
+	
+			reflex initiateChillGuy when: !empty(ChillGuy at_distance talk_range) and flip(0.01){
+		list ChillGuysNotBusy <- ChillGuy at_distance talk_range;
+				
+		if(length(ChillGuysNotBusy)>0)
+		{
+			ChillGuy talkTo <- one_of(ChillGuysNotBusy);
+			
+			ask talkTo {
+							
+				if(myself.patrol>50)
+				{
+				write myself.name+" says "+myself.askChillguy2[0];
+				if(self.drunk>0)
+				{
+					write self.name+" says "+self.answerPolice2[0];
+					
+				}
+				else{
+					write self.name+" says "+self.answerPolice2[1];
+				}
+				}			
+				else{
+				write myself.name+"says"+myself.askChillguy2[1];
+				}
+										
+				
+			}
+		}
+				
+	} 
+	
+		
+    reflex beIdle when: empty(Thief at_distance 3)and !patroling and !raid{
+    	
+       if(patrol<=30){
+        targetPoint <- any_location_in(one_of(Stage));
+        patrol <- rnd(1,100);
+        patroling <- true;
+        }
+        
+        else if(patrol>30 and patrol<=60){
+        targetPoint <- any_location_in(one_of(Pub));
+        patrol <- rnd(1,100);
+        patroling <- true;
+        }
+        
+        else{
+         targetPoint <- any_location_in(one_of(PhotoArea));
+         patrol <- rnd(1,100);
+         patroling <- true;
+         }  
+             
+	}
+	
+	reflex moveToTarget when: targetPoint != nil{
+		do goto target:targetPoint;
+	}
+	
+	
+	reflex gotoRobbed when:!empty(informs) and !raid{
+		
+	   write name+"STOPP*********SLPD";
+	   
+	   catchThiefSuccess<-rnd(0,50);
+	  
+	   list<string> askThief<-["&&&&Show me your pockets&&&&&","&&&&&&I'll take you to jail&&&&&&","&&&&&&&Remember, I have my eyes on you&&&&&&&&&&"];	   
+	   message informFromInitiator <- informs[0];
+	   agent thief <- informFromInitiator.contents[0];
+	   point thiefLoc <- informFromInitiator.contents[1];
+	   
+	
+	   do start_conversation with: [ to :: list(thief), protocol :: 'fipa-contract-net', performative :: 'cfp', contents :: [askThief[0],askThief[1],askThief[2],catchThiefSuccess]];
+	
+	   targetPoint<-any_location_in(one_of(PoliceStation));
+	
+      }
+
+    reflex inStation when: !empty(Pub at_distance 1) or!empty(PhotoArea at_distance 1) or !empty(Stage at_distance 1) and !raid{
+       num <-0;
+		self.patroling <- false;
+	
+}
+  	
+	reflex initiate_raid when: !empty(PoliceStation at_distance 2){
+		
+		ask PoliceStation at_distance 1{
+			
+			if(self.money=0 or self.money<0 and myself.money=0 or myself.money<0){
+				
+				myself.targetPoint <- any_location_in(one_of(Casino));	    
+			    myself.raid <- true;
+			    
+			}
+			else if(myself.money>0){
+				
+				myself.raid <- false;
+				self.money <- myself.money;
+				
+				myself.money <-0;
+				
+				 if(myself.patrol<=30){ 	
+		       myself.targetPoint <- any_location_in(one_of(Stage));
+               myself.patrol <- rnd(1,100);
+               myself.patroling <- true; 
+               	       
+            }
+        else if(myself.patrol>30 and myself.patrol<=60){
+               myself.targetPoint <- any_location_in(one_of(Pub));
+               myself.patrol <- rnd(1,100);
+               myself.patroling <- true;
+               
+        }
+        else{
+               myself.targetPoint <- any_location_in(one_of(PhotoArea));
+               myself.patrol <- rnd(1,100);
+               myself.patroling <- true;
+               
+         }
+         
+			}
+			else{
+				
+				 if(myself.patrol<=30){ 	
+		         myself.targetPoint <- any_location_in(one_of(Stage));
+                 myself.patrol <- rnd(1,100);
+        myself.patroling <- true; 	       
+        }
+        else if(myself.patrol>30 and myself.patrol<=60){
+        myself.targetPoint <- any_location_in(one_of(Pub));
+        myself.patrol <- rnd(1,100);
+        myself.patroling <- true;
+        }
+        else{
+         myself.targetPoint <- any_location_in(one_of(PhotoArea));
+         myself.patrol <- rnd(1,100);
+         myself.patroling <- true;
+         }
+	        	
+			}
+		}
+	}
+	
+	reflex goto_casino when: !empty(Casino at_distance 1) and raid  {
+		ask Casino{
+			
+			if(self.money>0){
+				myself.money <- self.money;
+				self.money<-0;
+				myself.targetPoint <- any_location_in(one_of(PoliceStation));
+				
+			}
+			else{
+				myself.targetPoint <- any_location_in(one_of(Stage));
+				myself.raid <- false;
+			}
+		
+		}
+	}
+	
+	reflex talk_to_police when: !empty(cfps) and !raid {
+	
+		message talkToJournalist <- cfps[0];
+		string info <- talkToJournalist.contents[0];
+		string info2 <- talkToJournalist.contents[1];
+	    write info;
+	    int takePicorNot <- rnd(30,70);
+	    if(takePicorNot < 50){
+	    	write "<<<<<<<<<<Sure why not!>>>>>>>>>>";
+	    	write info2;
+	    }else{
+	    	write "<<<<<<<<<I'm a litle busy right now! Sorry!>>>>>>>>>";
+	    }
+	    
+	}
+	
+	aspect base {
+		draw circle(1) color: #blue depth:1;
+	}
+	
+}
+
+species Journalist skills: [fipa,moving] {
+	
+	bool Journalist<-true; 
+	bool busy <- false;
+	int startDelay <- 200;
+	bool caught <- false;
+	float currentBestUtility <- 0.0;
+	int count <- rnd(5,20);
+	
+	
+	int participantListIndex;
+	
+	point initPoint <- {(rnd(0,100)),(rnd(0,100)),0};
+		
+	
+	point targetPoint <- nil;
+	
+	/* Traits */
+	int wantsToPhoto <- rnd(0,50);
+	int isAgoodPhotographer <- rnd(0,50);
+	
+	/*Rules, more are below	 */
+	list<string> answerChillguy1 <- ["Yes of course, I use to send information to everyone","Go away I'm busy"];
+	
+	list<string> answerRockfan1 <- ["I promise to send Information to you","I'm busy right now"];
+		
+    reflex beIdle when: targetPoint = nil {
+		do wander;
+	}
+	
+	reflex moveToTarget when: targetPoint != nil{
+		do goto target:targetPoint;
+	}
+	
+	reflex take_chill_picture when: !empty(ChillGuy at_distance 1)   {
+	write name+" found ChillGuy";
+	wantsToPhoto<-rnd(0,50);
+	if(wantsToPhoto>25)
+	{
+	list<string> askAll<-["You want a Picture?","Come to Photoshop to collect the photos!","Click click click"];	   
+    
+    targetPoint <- any_location_in(one_of(ChillGuy at_distance 1));
+	do start_conversation with: [ to :: list(ChillGuy at_distance 1), protocol :: 'fipa-contract-net', performative :: 'inform', contents :: [askAll[0],askAll[1],askAll[2],self,isAgoodPhotographer]];
+	count <- count - 1;
+	//write count;
+	}
+	else{
+		write name+" I don't want to take a photograph of you, youre to Chill ";
+	}
+	}
+	
+	
+	
+	reflex take_rock_picture when:  !empty(RockFan at_distance 1) {
+	write name+" found RockFan";
+	wantsToPhoto<-rnd(0,50);
+	
+		if(wantsToPhoto>25)
+	{
+	list<string> askAll<-["You want a Picture?","Come to Photoshop to collect the photos!","Click click click"];	   
+    
+    targetPoint <- any_location_in(one_of(RockFan at_distance 1));
+	do start_conversation with: [ to :: list(one_of(RockFan at_distance 1)), protocol :: 'fipa-contract-net', performative :: 'inform', contents :: [askAll[0],askAll[1],askAll[2],self,isAgoodPhotographer]];
+	count <- count - 1;
+	//write count;
+	}
+	else{
+		write name+" I don't want to take photo of you. You are too Rocky ";
+		
+	}
+	}
+ 	
+  	reflex go_to_studio when: count <=0{
+ 		targetPoint <- any_location_in(one_of(PhotoArea));
+ 		
+ 		
+ 	}
+ 	
+ 	reflex at_studio when: !empty(PhotoArea at_distance 1){
+ 		write "??????? Recharge please ?????????";
+ 		count <- rnd(5,20);
+ 		targetPoint <- any_location_in(one_of(RockFan));
+ 	}
+ 	
+ 	reflex take_police_picture when:  !empty(Police at_distance 1) and !caught {
+ 		list<string> askPolice<-["FLASH FLASH.....Special free photo for police. You want one?", "Here's your photo! Good day!"];	  
+        do start_conversation with: [ to :: list(one_of(Police at_distance 1)), protocol :: 'fipa-contract-net', performative :: 'cfp', contents :: [askPolice[0],askPolice[1]]];
+ 	
+ 	}
+ 	
+ 	reflex talk_to_Journalist when:  !empty(Journalist at_distance 1) and !caught {
+ 		list<string> askJournalist<-["YOO......Hows your day mate?", "MMM!! looks like your pockets are full! good business"];	  
+        do start_conversation with: [ to :: list(one_of(Journalist at_distance 1)), protocol :: 'fipa-contract-net', performative :: 'cfp', contents :: [askJournalist[0],askJournalist[1]]];
+ 	
+ 	}
+ 	
+  	reflex talk_when_notCaught when:  !empty(cfps) and caught {
+ 	
+ 		message talkToJournalist <- cfps[0];
+		string info <- talkToJournalist.contents[0];
+		string info2 <- talkToJournalist.contents[1];
+		write info;
+		write "<<<<<<<<<<Good my friend!>>>>>>>>>>>>";
+		write info2;
+		write "<<<<<<<<<<<<Yeah! pretty good business! Good guests as well>>>>>>>>>>>>>>>";		
+ 	}
+ 
+ 	
+ 	reflex take_pic when: !empty(informs){
+	 message informFromInitiator <- informs[0];
+	   agent thief <- informFromInitiator.contents[0];
+	  caught <- true;
+	   write"OOHH looks like "+ thief + " has been caught";
+	  targetPoint <- any_location_in(one_of(PoliceStation));
+		
+	}
+	
+	
+	reflex ask_PS when: !empty(PoliceStation at_distance 1){
+	
+		if((time-startDelay)>globalDelayTime)
+		{
+			write name+" please notify all festival guests to be careful!";
+			//targetPoint <- initPoint;
+			caught <- false;
+		}
+	}
+	
+	
+	reflex ignore when: !empty(refuses){
+			loop r over: refuses {
+		string info <- r.contents[0];
+		write info;
+		int picrand <- rnd(1,100);
+		if(picrand<=50){
+		targetPoint <- any_location_in(one_of(ChillGuy));
+	}
+	else{
+		targetPoint <- any_location_in(one_of(RockFan));
+	}
+	}
+	}
+	
+	aspect base {
+		draw circle(1) color: #chocolate depth:1;
+	}
+	
+}
+
+
+species ChillGuy skills: [fipa,moving] {
+	
+	bool ChillGuy <-true;
+	bool isBad <- false;
+	bool busy <- false;
+	bool talking<-false;
+	int localDelayTime;
+	
+	
+	bool delayOK<-true;
+	int startDelay;
+	
+		reflex countDelay when: !delayOK 
+	{
+		if((time-startDelay)>localDelayTime)
+		{
+			delayOK<-true;
+			talking<-false;
+		}
+			
+	}
+	
+	
+	float currentBestUtility <- 0.0;
+	
+	int participantListIndex;
+	
+	point initPoint <- {(rnd(0,100)),(rnd(0,100)),0};
+	
+	/* TRAITS */
+	int generous<-rnd(1,100);
+	int acceptdrink<-rnd(1,100);
+	int wantsToDance<-rnd(1,100);
+	int startafight<-rnd(1,100);
+	int fightwinorloose <-rnd(1,100);
+	
+	/* RULES */
+
+	//ROCKFAN
+	list<string> answerPub1<-["No I don't want a drink?","Yes I want a drink?"];
+	list<string> answerStage1<-["No I don't want to dance?","Yes I want to dance"];
+	string answerOutside1  <-  "None of your business!!!";
+	
+	//CHILLGUY
+	list<string> answerChillGuy1 <- ["Hi! Thanks, it's a nice day today.","I will defend myself.","No I don't want to fight"];	
+	list<string> askChillGuy1 <- ["Hello, good day to you sir","I want to fight you","I will fight you another day then"];
+	
+	//THIEF
+	list<string> askThief1 <- ["Hello, why are you so close?","Help, I will go away from you thief"];
+	
+	//POLICE
+	list<string> askPolice1 <- ["Have you seen any Thiefs somewhere?","Good day to you Officer"];
+	list<string> answerPolice2 <- ["Because I am too drunk","I am quiet from birth"];
+	
+	
+	//Journalist
+	list<string> askJournalist1 <- ["Can you take my Photo?","Damn you journalist go away"];
+	
+	
+	
+	
+	
+	/* ATTRIBUTES */
+	int drunk<-0;
+	int happy<-0;
+	int money<-rnd(50,100);
+	int savings <- money;
+	bool robbed <- false;
+	int diff<-0;
+		
+	
+	point targetPoint <- nil;
+	
+		reflex arrivedAtDestination when: busy{
+			if(distance_to(self,targetPoint)<1){
+			
+			write self.name + "At destination";
+			self.targetPoint <- nil;
+			self.busy<-false;			
+			}
+		}
+	    
+	    
+	    reflex take_pic_chill when: !empty(informs){
+	   message informFromInitiator <- informs[0];
+	   message proposalFromInitiator <-informFromInitiator.contents[3];
+	   string photo <- informFromInitiator.contents[0];
+	   string collectphoto <- informFromInitiator.contents[1];
+	   string takingphoto <- informFromInitiator.contents[2];
+	   int isGoodPhotograph<- informFromInitiator.contents[3];
+
+	   int takepic <- rnd(40,60);
+	   
+	   if(takepic<=50 and isGoodPhotograph>25){
+	   	 write photo;
+	   	 write "Sure why not!!";
+	   	 write takingphoto;
+	   	 write collectphoto;
+	   	 targetPoint <- any_location_in(one_of(PhotoArea)); 
+	   }
+	   else{
+	   	do refuse with: [ message :: informFromInitiator, contents :: ["No Thanks!!"] ];
+	   }
+		
+	}
+	
+	
+	
+			reflex initiateTalkJournalist when: !empty(Journalist at_distance talk_range) and !talking and flip(0.01) {
+		list JournalistNotBusy <- Journalist at_distance talk_range;
+				
+		if(length(JournalistNotBusy)>0)
+		{
+			Journalist talkTo <- one_of(JournalistNotBusy);
+			
+			ask talkTo {
+				myself.talking<-true;				
+							
+				if(myself.generous>50)
+				{
+				write myself.name+" says "+myself.askJournalist1[0];
+				if(self.isAgoodPhotographer>25)
+				{
+					write self.name+" says "+self.answerChillguy1[0];
+				}
+				else{
+					write self.name+" says "+self.answerChillguy1[1];
+				}
+				}			
+				else{
+				write myself.name+"says"+myself.askJournalist1[1];
+				}
+				
+				//MAKE DIFFERENT DELAYS SO THEY DON't START TALKING
+				myself.talking<-false;
+							
+				
+			}
+		}
+				
+	} 
+	
+		reflex initiateTalkPolice when: !empty(Police at_distance talk_range) and !talking and flip(0.01) {
+		list PolicesNotBusy <- Police at_distance talk_range;
+				
+		if(length(PolicesNotBusy)>0)
+		{
+			Police talkTo <- one_of(PolicesNotBusy);
+			
+			ask talkTo {
+				myself.talking<-true;				
+							
+				if(myself.generous>50)
+				{
+				write myself.name+" says "+myself.askPolice1[0];
+				if(self.catchThiefSuccess>25)
+				{
+					write self.name+" says "+self.answerChillguy1[0];
+				}
+				else{
+					write self.name+" says "+self.answerChillguy1[1];
+				}
+				}			
+				else{
+				write myself.name+"says"+myself.askPolice1[1];
+				}
+			
+				
+				
+				//MAKE DIFFERENT DELAYS SO THEY DON't START TALKING
+				myself.talking<-false;
+							
+				
+			}
+		}
+				
+	} 
+	
+			reflex initiateTalkThief when: !empty(Thief at_distance talk_range) and !talking and flip(0.01) {
+		list ThiefsNotBusy <- Thief at_distance talk_range;
+				
+		if(length(ThiefsNotBusy)>0)
+		{
+			Thief talkTo <- one_of(ThiefsNotBusy);
+			
+			ask talkTo {
+				myself.talking<-true;				
+							
+				if(myself.generous>50)
+				{
+				write myself.name+" says "+myself.askThief1[0];
+				if(self.willSucceedRob>25)
+				{
+					write self.name+" says "+self.answerChillguy1[0];
+				}
+				else{
+					write self.name+" says "+self.answerChillguy1[1];
+				}
+				}			
+				else{
+				write myself.name+"says"+myself.askThief1[1];
+				}
+			
+				
+				
+				//MAKE DIFFERENT DELAYS SO THEY DON't START TALKING
+				myself.talking<-false;
+							
+				
+			}
+		}
+				
+	} 
+	
+	
+		reflex initiateTalkRock when: !empty(RockFan at_distance talk_range) and !talking and flip(0.01) {
+		list RockFansNotBusy <- RockFan at_distance talk_range where (each.talking=false);
+				
+		if(length(RockFansNotBusy)>0)
+		{
+			RockFan talkTo <- one_of(RockFansNotBusy);
+			
+			ask talkTo {
+				self.talking<-true;
+				myself.talking<-true;				
+				bool inPub<-false;
+				bool inStage <- false;
+				bool inOutside <- false;
+				
+				if (distance_to(myself,one_of(Pub))<8)
+				{
+					inPub<-true;
+				}
+												
+				if (distance_to(myself,one_of(Stage))<8)
+				{
+					inStage<-true;
+				}
+				
+				if(!inStage and !inPub)
+				{
+					inOutside<-true;
+				}
+						
+				write myself.name+" says hello. I'm usually not interested in talking to you.";
+				write self.name+" says hello back";
+			
+				string localAsk <- inStage ? self.askStage1 : (inPub ? self.askPub1 : self.askOutside1);
+
+				write self.name+" says" + localAsk;
+				
+				// PUB 
+				if(inPub)
+				{
+					if(myself.acceptdrink<acceptDrinkLimit)
+					{
+					//write self.name+" says"+answerPub1[0] +" "+self.acceptdrink + acceptDrinkLimit;
+					myself.happy<-myself.happy-5;
+					self.happy<-self.happy-5;
+					myself.drunk<-myself.drunk-1;
+					self.drunk<-self.drunk-1;
+					}
+					else{
+					write myself.name+" says"+myself.answerPub1[1];
+					myself.happy<-myself.happy+5;
+					self.happy<-self.happy+5;
+					myself.drunk<-myself.drunk+1;
+					self.drunk<-self.drunk+1;
+					}
+				}
+				
+				// STAGE 
+				if(inStage)
+				{
+					if(myself.wantsToDance<wantsToDanceLimit)
+					{
+					write myself.name+" says"+myself.answerStage1[0] ;
+					myself.happy<-myself.happy-1;
+					self.happy<-self.happy-1;
+					}
+					else{
+					write myself.name+" says"+myself.answerStage1[1];
+					myself.happy<-myself.happy+5;
+					self.happy<-self.happy+5;
+					}
+				}
+
+				/* OUTSIDE */
+				if(inOutside)
+				{
+				write myself.answerOutside1;
+				}
+				
+				//MAKE DIFFERENT DELAYS SO THEY DON't START TALKING
+				myself.talking<-false;
+				self.talking<-false;
+				
+				
+			}
+	}
+				
+	} 
+	
+	 reflex photo_area when: !empty(PhotoArea at_distance 1){
+	 	ask PhotoArea{
+	 		write "There you go! Your Photos";
+	 	}
+	 }
+	    
+	    reflex gotoPS1 when: savings != money{
+	   
+	    	//write "I need to go to the police station! I was robbed  "+self;
+	    	robbed <- true;
+	    	
+	    	targetPoint <- any_location_in(one_of(PoliceStation));
+	    	diff <- savings-money;
+	    	
+	    	
+	    	ask PoliceStation at_distance 1{
+	    		
+	    		self.money <- self.money-myself.diff;
+	    		myself.money <- myself.savings;
+	    		myself.robbed <- false;
+	    	}	  	
+	    }
+
+		reflex decideWhatToDo when:!talking {
+		
+		//decide where to go or not go somewhere
+		if(!busy)
+		{
+			int whereToGo <- rnd(0,40);
+			
+			if(whereToGo=0)
+			{
+				//Stage
+				write name+"goes to stage";
+				busy<-true;
+				targetPoint<- any_location_in(one_of(Stage));
+				targetPoint <- {(targetPoint.x-rnd(-circleDistance/2,circleDistance/2)),(targetPoint.y-rnd(-circleDistance/2,circleDistance/2)),targetPoint.z };
+			}
+			
+			if(whereToGo=2)
+			{
+				//Pub
+				write name+"goes to pub";
+				busy<-true;
+				targetPoint<- any_location_in(one_of(Pub));	
+				targetPoint <- {(targetPoint.x-rnd(-circleDistance/2,circleDistance/2)),(targetPoint.y-rnd(-circleDistance/2,circleDistance/2)),targetPoint.z };
+			}
+			
+			int becomeBad <- rnd(0,40);
+			if(becomeBad=25){
+				write name+"becomes bad";
+				isBad<-true;
+			}
+
+		}
+
+	}
+	
+	
+	reflex initiateTalk when: !empty(ChillGuy at_distance talk_range) and !talking {
+	list ChillGuysNotBusy <- ChillGuy at_distance talk_range where (each.talking=false);
+				
+		if(length(ChillGuysNotBusy)>0)
+		{
+			ChillGuy talkTo <- one_of(ChillGuysNotBusy);
+			
+			ask talkTo {
+				self.talking<-true;
+				myself.talking<-true;				
+										
+				string localAsk <- myself.isBad ? myself.askChillGuy1[1] : myself.askChillGuy1[0];
+
+				write myself.name+" says" + localAsk;
+				
+				/* BAD */
+				if(myself.isBad)
+				{
+					
+						if(self.startafight>50)
+						{
+							write self.name+" says"+self.answerChillGuy1[1];
+							
+							if(myself.fightwinorloose>self.fightwinorloose)
+							{
+								//badguy wins
+								write myself.name+" wins the fight";
+								myself.fightwinorloose<-myself.fightwinorloose+5;
+								myself.happy<-myself.happy+5;
+								self.happy<-self.happy-5;
+								
+							}
+							else{
+								write self.name+" wins the fight";
+								self.fightwinorloose<-myself.fightwinorloose+5;
+								self.happy<-self.happy+5;
+								myself.happy<-myself.happy-5;
+							}
+							
+							
+						}
+						else{
+							write self.name+" says"+self.answerChillGuy1[2];
+							write myself.name+" says"+myself.askChillGuy1[2];							
+						}
+					
+					//random so differente behaviour next time
+					self.startafight<-rnd(1,100);
+					myself.startafight<-rnd(1,100);
+		
+				}
+				
+				/* NOT BAD */
+				else
+				{
+					if(self.wantsToDance>wantsToDanceLimit)
+					{
+					write self.name+" says"+answerChillGuy1[0] ;
+					self.happy<-self.happy+5;
+					myself.happy<-myself.happy+5;
+					}
+
+				}
+					
+				//MAKE DIFFERENT DELAYS SO THEY DON'T START TALKING
+				self.delayOK<-false;		
+				self.startDelay<-time;
+				self.localDelayTime<-globalDelayTime+30;
+					
+				myself.delayOK<-false;		
+				myself.startDelay<-time;
+				myself.localDelayTime<-globalDelayTime;
+				
+				
+			}
+		}
+				
+	} 
+	
+		
+    reflex beIdle when: !(busy) and !talking {
+		do wander;
+		}
+		
+	reflex moveToTarget when: targetPoint != nil and !talking
+	{
+		do goto target:targetPoint;
+	}
+	
+	
+	aspect base {
+		draw circle(1) color: #green depth:1;
+			
+		
+	}
+	
+}
+
+species RockFan skills: [fipa,moving] {
+	
+	//random value of half of the first initiatior.
+	bool busy <- false;
+	bool Rockfan<-true; 
+	float currentBestUtility <- 0.0;
+	int participantListIndex;
+	point initPoint <- {(rnd(0,100)),(rnd(0,100)),0};
+	point targetPoint <- nil;
+	bool talking <- false;
+	int localDelayTime;
+	bool delayOK<-true;
+	int startDelay;
+	bool phone_call<-false;
+	bool wait_for_phone_answer <-false;
+	
+		reflex countDelay when: !delayOK 
+	{
+		if((time-startDelay)>globalDelayTime)
+		{
+			delayOK<-true;
+			talking<-false;
+		}
+			
+	}
+	
+	
+	 reflex take_pic when: !empty(informs){
+	 message informFromInitiator <- informs[0];
+	  message proposalFromInitiator <-informFromInitiator.contents[3];
+	   string photo <- informFromInitiator.contents[0];
+	   string collectphoto <- informFromInitiator.contents[1];
+	   string takingphoto <- informFromInitiator.contents[2];
+	   int isGoodPhotograph<- informFromInitiator.contents[3];
+	   
+	   int takepic <- rnd(40,60);
+	   
+	   if(takepic<=50 and isGoodPhotograph>25){
+	   	 write photo;
+	   	 write "Sure why not!!";
+	   	 write takingphoto;
+	   	 write collectphoto;
+	   	 targetPoint <- any_location_in(one_of(PhotoArea)); 
+	   }
+	   else{
+	   	do refuse with: [ message :: informFromInitiator, contents :: ["No thanks"] ];
+	   }	
+	}
+	
+	reflex photo_area when: !empty(PhotoArea at_distance 1){
+	 	ask PhotoArea{
+	 		write "There you go! Your Photos";
+	 	}
+	 }
+			reflex arrivedAtDestination when: busy{
+				if(targetPoint!=nil)
+				{
+			if(distance_to(self,targetPoint)<1){
+			
+			write self.name + "At destination";
+			self.targetPoint <- nil;
+			self.busy<-false;			
+			}
+			
+			}
+		}
+	
+	
+	/* TRAITS */
+	int generous;
+	int acceptdrink<-rnd(1,100);
+	int wantsToDance<-rnd(1,100);
+	int fightwinorloose<-rnd(1,100);
+	
+	/* RULES for CHILLGUY */
+	string askPub1<-"Do you want a drink?";
+	string askStage1<-"Do you want to dance?";
+	string askOutside1<-"Where are you going?";
+	
+	//THIEF
+	list<string> askThief1 <- ["Why are you so close? Answer or I will hit you!","You smell bad leave me alone"];
+	
+	//POLICE
+	list<string> askPolice1 <- ["Catch them thiefs, they are everywhere?","Hello Police"];
+	
+	//Journalist
+	list<string> askJournalist1 <- ["You should take a Photo of me!","I hate Journalists"];
+	
+	//RockFan
+	list<string> answerPolice2 <- ["Because I am too drunk","I love the music"];
+	
+	
+	
+	
+	/* ATTRIBUTES */
+	int drunk<-0 max:100;
+	int happy<-0 max:100;
+	int money<-rnd(50,100);
+	int savings <- money;
+	bool robbed <- false;
+	int diff <-0;
+	
+				reflex initiateTalkJournalist when: !empty(Journalist at_distance talk_range) and !talking and flip(0.01) {
+		list JournalistNotBusy <- Journalist at_distance talk_range;
+				
+		if(length(JournalistNotBusy)>0)
+		{
+			Journalist talkTo <- one_of(JournalistNotBusy);
+			
+			ask talkTo {
+				myself.talking<-true;				
+							
+				if(myself.generous>50)
+				{
+				write myself.name+" says "+myself.askJournalist1[0];
+				if(self.isAgoodPhotographer>25)
+				{
+					write self.name+" says "+self.answerRockfan1[0];
+				}
+				else{
+					write self.name+" says "+self.answerRockfan1[1];
+				}
+				}			
+				else{
+				write myself.name+"says"+myself.askJournalist1[1];
+				}
+			
+				
+				
+				//MAKE DIFFERENT DELAYS SO THEY DON't START TALKING
+				myself.talking<-false;
+							
+				
+			}
+		}
+				
+	} 
+	
+		reflex initiateTalkPolice when: !empty(Police at_distance talk_range) and !talking and flip(0.01){
+		list PolicesNotBusy <- Police at_distance talk_range;
+				
+		if(length(PolicesNotBusy)>0)
+		{
+			Police talkTo <- one_of(PolicesNotBusy);
+			
+			ask talkTo {
+				myself.talking<-true;				
+							
+				if(myself.generous>50)
+				{
+				write myself.name+" says "+myself.askPolice1[0];
+				if(self.catchThiefSuccess>25)
+				{
+					write self.name+" says "+self.answerRockfan1[0];
+				}
+				else{
+					write self.name+" says "+self.answerRockfan1[1];
+				}
+				}			
+				else{
+				write myself.name+"says"+myself.askPolice1[1];
+				}
+			
+				
+				
+				//MAKE DIFFERENT DELAYS SO THEY DON't START TALKING
+				myself.talking<-false;
+							
+				
+			}
+		}
+				
+	} 
+	
+			reflex initiateTalkThief when: !empty(Thief at_distance talk_range) and !talking and flip(0.01){
+		list ThiefsNotBusy <- Thief at_distance talk_range;
+				
+		if(length(ThiefsNotBusy)>0)
+		{
+			Thief talkTo <- one_of(ThiefsNotBusy);
+			
+			ask talkTo {
+				myself.talking<-true;				
+							
+				if(myself.generous>50)
+				{
+				write myself.name+" says "+myself.askThief1[0];
+				if(self.willSucceedRob>25)
+				{
+					write self.name+" says "+self.answerRockfan1[0];
+				}
+				else{
+					write self.name+" says "+self.answerRockfan1[1];
+				}
+				}			
+				else{
+				write myself.name+"says"+myself.askThief1[1];
+				}
+			
+				
+				
+				//MAKE DIFFERENT DELAYS SO THEY DON't START TALKING
+				myself.talking<-false;
+							
+				
+			}
+		}
+				
+	} 
+
+	   reflex gotoPS1 when: savings != money{
+	    //	write "money"+money;
+	    //	write "savings"+savings;
+	    //	write "I need to go to the police station! I was robbed  "+self;
+	    	robbed <- true;
+	    	targetPoint <- any_location_in(one_of(PoliceStation));
+	    	diff <- savings- money;
+	    	
+	    	
+	    	ask PoliceStation at_distance 1{
+	    		//write"########Asking";
+	    		self.money <- self.money-myself.diff;
+	    		myself.money <- myself.savings;
+	    		myself.robbed <- false;
+	    	}
+	  	
+	    }
+	    
+	reflex receivePhoneCall when: !empty(cfps){
+		talking<-true;
+		busy <-true;
+		
+		message phoneCall <- cfps[0];
+		agent caller <- agent(phoneCall.sender);
+		
+		string query <- phoneCall.contents[0];
+		
+		if(query="PhonecallTO")
+		{
+			string proposal <- phoneCall.contents[1];
+			point toGo <- phoneCall.contents[2];
+			string answer;
+			
+			write name+" receives phone call from:"+agent(phoneCall.sender).name+": "+proposal;
+			bool answerYesorNo <- flip(0.5);
+			if(answerYesorNo)
+			{
+			answer<-"Yes, I would love to meet you. I'm going";	
+			//write "-------------> IS GOING TO "+toGo;
+			targetPoint<-toGo;
+			talking <- false;
+			}
+			else{
+			answer<-"No I do not want to meet you. Go alone";	
+			talking<-false;
+			busy <-false;			
+			}
+			
+			do start_conversation with: [ to :: list(agent(phoneCall.sender)), protocol :: 'fipa-contract-net', performative :: 'accept_proposal', contents :: ["PhoneAnswer",answer,toGo] ];
+			
+						
+		}
+		
+	}
+	//Start phonecall with Rockfan
+	reflex startPhoneCall when: phone_call{
+		phone_call<-false;
+		list RockFansNotBusy <- RockFan where (each.talking=false and each.busy=false);
+		
+		if(length(RockFansNotBusy)>0)
+		{
+		
+		point suggestPoint;
+		bool goToPuborStage <- flip(0.5);
+		string whereTogo;
+		if(goToPuborStage)
+		{
+		suggestPoint<- any_location_in(one_of(Stage));
+		whereTogo<-"Stage";	
+		}
+		else{
+		suggestPoint<- any_location_in(one_of(Pub));	
+		whereTogo<-"Pub";	
+		}
+		
+		do start_conversation with: [ to :: list(one_of(RockFansNotBusy)), protocol :: 'fipa-contract-net', performative :: 'cfp', contents :: ["PhonecallTO","Would you meet me at"+whereTogo,suggestPoint] ];
+		wait_for_phone_answer<-true;
+		}
+		else{
+			//No one to call
+				write name+": no one to call...";
+				busy<-false;
+				talking<-false;
+		}
+		
+	}
+	
+	reflex waitForAnswer when: !empty(accept_proposals) and wait_for_phone_answer {
+		
+	wait_for_phone_answer<-false;		
+	
+	message a <- accept_proposals[0];
+	write name + ' receives a answer from ' + agent(a.sender).name + ' with content ' + a.contents[1];
+	string answer1 <- a.contents[1];
+
+	point toGoresponse <- a.contents[2];
+	//write "-------------> IS GOING TO "+toGoresponse;
+	
+	
+	
+	if(answer1 contains "Yes" )
+	{
+		happy<-happy+0.1;
+	}
+	else{
+		happy<-happy-0.1;		
+	}
+	
+	write name + "says ok bye, see you there";
+	talking<-false;
+	
+	targetPoint <- toGoresponse;
+	
+	}
+	
+	
+	reflex initiateTalk when: !empty(ChillGuy at_distance talk_range) and !talking {
+	list ChillGuysNotBusy <- ChillGuy at_distance talk_range where (each.talking=false);
+				
+		if(length(ChillGuysNotBusy)>0)
+		{
+			ChillGuy talkTo <- one_of(ChillGuysNotBusy);
+			
+			ask talkTo {
+				self.talking<-true;
+				myself.talking<-true;				
+				bool inPub<-false;
+				bool inStage <- false;
+				bool inOutside <- false;
+				
+				if (distance_to(myself,one_of(Pub))<8)
+				{
+					inPub<-true;
+				}
+												
+				if (distance_to(myself,one_of(Stage))<8)
+				{
+					inStage<-true;
+				}
+				
+				if(!inStage and !inPub)
+				{
+					inOutside<-true;
+				}
+						
+				write myself.name+" says hello.";
+				write self.name+" says hello back";
+				string localAsk <- inStage ? myself.askStage1 : (inPub ? myself.askPub1 : myself.askOutside1);
+				
+				write myself.name+" says" + localAsk;
+				
+				/* PUB */
+				if(inPub)
+				{
+					if(self.acceptdrink<acceptDrinkLimit)
+					{
+					//write self.name+" says"+answerPub1[0] +" "+self.acceptdrink + acceptDrinkLimit;
+					self.happy<-self.happy-5;
+					myself.happy<-myself.happy-5;
+					self.drunk<-self.drunk-1;
+					myself.drunk<-myself.drunk-1;
+					}
+					else{
+					write self.name+" says"+answerPub1[1];
+					self.happy<-self.happy+5;
+					myself.happy<-myself.happy+5;
+					self.drunk<-self.drunk+1;
+					myself.drunk<-myself.drunk+1;
+					}
+				}
+				
+				/* STAGE */
+				if(inStage)
+				{
+					if(self.wantsToDance<wantsToDanceLimit)
+					{
+					write self.name+" says"+answerStage1[0] ;
+					self.happy<-self.happy-1;
+					myself.happy<-myself.happy-1;
+					}
+					else{
+					write self.name+" says"+answerStage1[1];
+					self.happy<-self.happy+5;
+					myself.happy<-myself.happy+5;
+					}
+				}
+
+				/* OUTSIDE */
+				if(inOutside)
+				{
+				write self.answerOutside1;
+				}
+				
+				//MAKE DIFFERENT DELAYS SO THEY DON't START TALKING
+				self.delayOK<-false;		
+				self.startDelay<-time;
+				self.localDelayTime<-globalDelayTime+30;
+				
+				myself.delayOK<-false;		
+				myself.startDelay<-time;
+				myself.localDelayTime<-globalDelayTime;
+				
+				
+			}
+		}
+				
+	} 
+	
+	reflex decideWhatToDo when: !talking{
+			
+		//decide where to go or not go somewhere
+		if(!busy)
+		{
+			int whereToGo <- rnd(0,20);
+			
+			if(whereToGo=0)
+			{
+				//Stage
+				write name+"goes to stage";
+				busy<-true;
+				targetPoint<- any_location_in(one_of(Stage));	
+				targetPoint <- {(targetPoint.x-rnd(-circleDistance/2,circleDistance/2)),(targetPoint.y-rnd(-circleDistance/2,circleDistance/2)),targetPoint.z };
+			}
+			
+			if(whereToGo=2)
+			{
+				//Pub
+				write name+"goes to pub";
+				busy<-true;
+				targetPoint<- any_location_in(one_of(Pub));
+				targetPoint <- {(targetPoint.x-rnd(-circleDistance/2,circleDistance/2)),(targetPoint.y-rnd(-circleDistance/2,circleDistance/2)),targetPoint.z };
+					
+			}
+			
+			if(whereToGo=3)
+			{
+				//StartPhoneCall
+				write name+"Tries to call another Rockfan";
+				busy<-true;
+				phone_call<-true;
+				talking<-true;
+			}
+						
+			
+		}
+
+	}
+	
+		
+    reflex beIdle when: !(busy) and !talking {
+		do wander;
+		}
+		
+	reflex moveToTarget when: targetPoint != nil and !talking
+	{
+		
+		do goto target:targetPoint;
+		
+	}
+	
+	aspect base {
+		draw circle(1) color: #black depth:1;
+			
+		
+	}
+	
+}
+
+experiment test type: gui {
+	
+    
+	//parameter "Wants to dance limit" var: wantsToDanceLimit;
+    //parameter "Wants to drink limit" var: acceptDrinkLimit;
+	
+
+	output {
+		   //monitor "Happy value" value: sumHappy;
+		   //monitor "Drunk value" value: sumDrunk;
+		   
+		  
+		display my_display type:opengl {
+			species Stage aspect:base;
+			
+			species ChillGuy aspect:base;	
+			species RockFan aspect:base;	
+			species Thief aspect:base;	
+			species Police aspect:base;	
+			species Journalist aspect:base;	
+			
+			
+			species Pub aspect:base;
+			species Casino aspect:base;
+			species PoliceStation aspect:base;
+			species PhotoArea aspect:base;
+			
+			
+			}
+			
+			   /*  display chart refresh: every(10 #cycles) {
+        chart "Happiness" type: series style: spline {
+        data "Happy value" value: sumHappy color: #green marker: false;
+        data "Drunk valuen" value: sumDrunk color: #red marker: false;
+      
+        }
+        
+        }*/
+        
+        //layout #split parameters: true navigator: false editors: false consoles: true ;	
+		
+		/*display "data_pie_chart" type: java2D synchronized: true
+		{
+			chart "Police Repo vs Casino Repo" type: pie style: ring background: # darkblue color: # lightgreen axes: # yellow title_font: 'Serif' title_font_size: 32.0 title_font_style: 'italic'
+			tick_font: 'Monospaced' tick_font_size: 14 tick_font_style: 'bold' label_font: 'Arial' label_font_size: 32 label_font_style: 'bold' x_label: 'Nice Xlabel' y_label:
+			'Nice Ylabel'
+			{
+				data "Police Repo" value: policeRepo color: # black;
+				data "Casino Repo" value: financeIn color: # blue;
+			}
+
+		}
+		/*display "repo_pie_chart" type: java2D synchronized: true
+		{
+			chart "ChillGuy Dance vs Not dance" type: pie style: ring background: # darkblue color: # lightgreen axes: # yellow title_font: 'Serif' title_font_size: 32.0 title_font_style: 'italic'
+			tick_font: 'Monospaced' tick_font_size: 14 tick_font_style: 'bold' label_font: 'Arial' label_font_size: 32 label_font_style: 'bold' x_label: 'Nice Xlabel' y_label:
+			'Nice Ylabel'
+			{
+				data "Chillguy wants to dance" value: ChillGuyWantsToDance color: # black;
+				data "Chillguy doesn't want to dance" value: ChillGuyNotWantToDance color: # blue;
+			}
+
+		}*/
+  	
+	}
+}
